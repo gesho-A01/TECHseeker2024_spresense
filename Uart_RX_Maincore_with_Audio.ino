@@ -92,44 +92,48 @@ void loop()
 
   while (Serial2.available() > 0) {
     char c = Serial2.read();
-
+    
     if (c == '{' && !isReceiving) {
       isReceiving = true;
       bufferIndex = 0;
     }
-
+    
     if (isReceiving) {
       if (bufferIndex < MAX_JSON_SIZE - 1) {
         jsonBuffer[bufferIndex++] = c;
       }
-
-      if (c == '}') {
-        jsonBuffer[bufferIndex] = '\0';  // Null-terminate the string
+      
+      if (c == '`') {
+        jsonBuffer[bufferIndex - 1] = '\0';  // '`'を終端文字に置き換え
         isReceiving = false;
-
-        // Parse JSON object
+        
+        // JSONオブジェクトを解析
         JSONVar jsonObj = JSON.parse(jsonBuffer);
 
-        // Check for parsing errors
-        if (JSON.typeof(jsonObj) == "undefined") {
+        // 解析エラーのチェック
+        if (JSON.typeof(jsonObj) == "undefined") { 
+          Serial.println(jsonBuffer);
           Serial.println("Parsing input failed!");
         } else {
-          // Get JSON data
-          int value = (int)jsonObj["point"];
+          // JSONデータを取得
+          int point = (int)jsonObj["point"];
           const char* message = (const char*)jsonObj["message"];
 
-          // Output received message to serial monitor
+          // 受信したメッセージをシリアルモニターに出力
           Serial.println("Received JSON: ");
           Serial.println(jsonBuffer);
+          Serial.print("Point: ");
+          Serial.println(point);
+          Serial.print("Message: ");
+          Serial.println(message);
 
-          // Process the received data
           int      ret;
           uint32_t snddata;
           uint32_t rcvdata;
           int8_t   sndid = 100; /* user-defined msgid */
           int8_t   rcvid;
 
-          snddata = value;
+          snddata = point;
           /* Echo back from SubCore */
 
           printf("Send: id=%d data=0x%08lx\n", sndid, snddata);
@@ -139,12 +143,14 @@ void loop()
             printf("MP.Send error = %d\n", ret);
           }
 
-          soundplay(value);
+          soundplay(point);
         }
-
-        bufferIndex = 0;  // Reset buffer
+        
+        bufferIndex = 0;  // バッファをリセット
       }
     }
+  }
+
   /* Timeout 1000 msec */
   //MP.RecvTimeout(1000);
   //
@@ -157,7 +163,6 @@ void loop()
   //       (snddata == rcvdata) ? "Success" : "Fail");
   //
   //delay(1000);
-  }
 }
 
 void soundplay(int pattern){
