@@ -85,45 +85,66 @@ void setup()
 
 void loop()
 {
-  int      ret;
-  uint32_t snddata;
-  uint32_t rcvdata;
-  int8_t   sndid = 100; /* user-defined msgid */
-  int8_t   rcvid;
+  static const int MAX_JSON_SIZE = 256;
+  static char jsonBuffer[MAX_JSON_SIZE];
+  static int bufferIndex = 0;
+  static bool isReceiving = false;
 
-  if (Serial2.available() > 0) {
-    // 受信したデータをバッファに読み込む
-    String receivedString = Serial2.readStringUntil('\n');
-    
-    // JSONオブジェクトを解析
-    JSONVar jsonObj = JSON.parse(receivedString);
-    
-    // 解析エラーのチェック
-    if (JSON.typeof(jsonObj) == "undefined") {
-      Serial.println("Parsing input failed!");
-      return;
+  while (Serial2.available() > 0) {
+    char c = Serial2.read();
+
+    if (c == '{' && !isReceiving) {
+      isReceiving = true;
+      bufferIndex = 0;
     }
-    
-    // JSONデータを取得
-    const char* message = (const char*) jsonObj["message"];
-    int value = (int) jsonObj["point"];
 
-    // 受信したメッセージをシリアルモニターに出力
-    Serial.println("Received JSON: ");
-    Serial.println(receivedString);
+    if (isReceiving) {
+      if (bufferIndex < MAX_JSON_SIZE - 1) {
+        jsonBuffer[bufferIndex++] = c;
+      }
 
-    snddata = value;
-  /* Echo back from SubCore */
+      if (c == '}') {
+        jsonBuffer[bufferIndex] = '\0';  // Null-terminate the string
+        isReceiving = false;
 
-  printf("Send: id=%d data=0x%08lx\n", sndid, snddata);
+        // Parse JSON object
+        JSONVar jsonObj = JSON.parse(jsonBuffer);
 
-  ret = MP.Send(sndid, snddata, subcore);
-  if (ret < 0) {
-    printf("MP.Send error = %d\n", ret);
-  }
+        // Check for parsing errors
+        if (JSON.typeof(jsonObj) == "undefined") {
+          Serial.println("Parsing input failed!");
+        } else {
+          // Get JSON data
+          int value = (int)jsonObj["point"];
+          const char* message = (const char*)jsonObj["message"];
 
-    soundplay(value);
- 
+          // Output received message to serial monitor
+          Serial.println("Received JSON: ");
+          Serial.println(jsonBuffer);
+
+          // Process the received data
+          int      ret;
+          uint32_t snddata;
+          uint32_t rcvdata;
+          int8_t   sndid = 100; /* user-defined msgid */
+          int8_t   rcvid;
+
+          snddata = value;
+          /* Echo back from SubCore */
+
+          printf("Send: id=%d data=0x%08lx\n", sndid, snddata);
+
+          ret = MP.Send(sndid, snddata, subcore);
+          if (ret < 0) {
+            printf("MP.Send error = %d\n", ret);
+          }
+
+          soundplay(value);
+        }
+
+        bufferIndex = 0;  // Reset buffer
+      }
+    }
   /* Timeout 1000 msec */
   //MP.RecvTimeout(1000);
   //
